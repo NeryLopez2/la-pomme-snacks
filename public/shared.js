@@ -364,7 +364,305 @@ function setupRealTimeValidation() {
     }
 }
 
-// ... el resto del código (initializePanels, initializeTabs, initializeAuth, etc.) se mantiene igual ...
+// ==================== INICIALIZACIÓN DE PANELES ====================
+function initializePanels() {
+    const menuBtn = document.getElementById('menuBtn');
+    const menuPanel = document.getElementById('menuPanel');
+    const cartBtn = document.getElementById('cartBtn');
+    const cartPanel = document.getElementById('cartPanel');
+    const userBtn = document.getElementById('userBtn');
+    const userPanel = document.getElementById('userPanel');
+    const overlay = document.getElementById('overlay');
+    const checkoutBtn = document.getElementById('checkoutBtn');
+    const confirmPaymentBtn = document.getElementById('confirmPaymentBtn');
+    const cancelPaymentBtn = document.getElementById('cancelPaymentBtn');
+    const sendWhatsAppBtn = document.getElementById('sendWhatsAppBtn');
+    const cancelPhoneBtn = document.getElementById('cancelPhoneBtn');
+    const paymentPanel = document.getElementById('paymentPanel');
+    const phonePanel = document.getElementById('phonePanel');
+    const fileInput = document.getElementById('paymentProof');
+    const previewDiv = document.getElementById('imagePreview');
+    
+    let pendingPaymentImage = null;
+    
+    if (menuBtn && menuPanel) {
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = menuPanel.style.display === 'block';
+            menuPanel.style.display = isVisible ? 'none' : 'block';
+            if (cartPanel) cartPanel.style.display = 'none';
+            if (userPanel) userPanel.style.display = 'none';
+        });
+    }
+    
+    if (cartBtn && cartPanel) {
+        cartBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = cartPanel.style.display === 'block';
+            cartPanel.style.display = isVisible ? 'none' : 'block';
+            if (userPanel) userPanel.style.display = 'none';
+            if (menuPanel) menuPanel.style.display = 'none';
+        });
+    }
+    
+    if (userBtn && userPanel) {
+        userBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = userPanel.style.display === 'block';
+            userPanel.style.display = isVisible ? 'none' : 'block';
+            if (cartPanel) cartPanel.style.display = 'none';
+            if (menuPanel) menuPanel.style.display = 'none';
+            
+            // Configurar validaciones en tiempo real cuando se abre el panel
+            if (!isVisible) {
+                setTimeout(setupRealTimeValidation, 100);
+            }
+        });
+    }
+    
+    document.addEventListener('click', (e) => {
+        if (cartPanel && !cartPanel.contains(e.target) && e.target !== cartBtn) {
+            cartPanel.style.display = 'none';
+        }
+        if (userPanel && !userPanel.contains(e.target) && e.target !== userBtn) {
+            userPanel.style.display = 'none';
+        }
+        if (menuPanel && !menuPanel.contains(e.target) && e.target !== menuBtn) {
+            menuPanel.style.display = 'none';
+        }
+    });
+    
+    if (checkoutBtn) {
+        checkoutBtn.addEventListener('click', () => {
+            if (cart.length === 0) {
+                Swal.fire('Carrito vacío', 'Agrega productos para continuar', 'warning');
+            } else if (!currentUser) {
+                Swal.fire('Inicia sesión', 'Debes iniciar sesión para continuar', 'warning');
+                if (userPanel) userPanel.style.display = 'block';
+            } else {
+                if (overlay) overlay.style.display = 'block';
+                if (paymentPanel) paymentPanel.style.display = 'block';
+            }
+        });
+    }
+    
+    if (fileInput && previewDiv) {
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    previewDiv.innerHTML = `<img src="${ev.target.result}" alt="Vista previa" class="img-fluid rounded" style="max-width: 100%; max-height: 150px; margin-top: 10px;">`;
+                    pendingPaymentImage = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewDiv.innerHTML = '';
+                pendingPaymentImage = null;
+            }
+        });
+    }
+    
+    if (confirmPaymentBtn) {
+        confirmPaymentBtn.addEventListener('click', () => {
+            if (!pendingPaymentImage) {
+                Swal.fire('Comprobante requerido', 'Debes subir una imagen del comprobante de pago', 'warning');
+                return;
+            }
+            if (overlay) overlay.style.display = 'none';
+            if (paymentPanel) paymentPanel.style.display = 'none';
+            const phoneInput = document.getElementById('customerPhone');
+            if (phoneInput && currentUser) phoneInput.value = currentUser.phone || '';
+            if (phonePanel) phonePanel.style.display = 'block';
+        });
+    }
+    
+    if (cancelPaymentBtn) {
+        cancelPaymentBtn.addEventListener('click', () => {
+            if (overlay) overlay.style.display = 'none';
+            if (paymentPanel) paymentPanel.style.display = 'none';
+            if (previewDiv) previewDiv.innerHTML = '';
+            pendingPaymentImage = null;
+            if (fileInput) fileInput.value = '';
+        });
+    }
+    
+    if (sendWhatsAppBtn) {
+        sendWhatsAppBtn.addEventListener('click', async () => {
+            const phone = document.getElementById('customerPhone')?.value.trim();
+            const serviceDate = document.getElementById('serviceDate')?.value;
+            const serviceTime = document.getElementById('serviceTime')?.value;
+            
+            if (!phone) {
+                Swal.fire('Teléfono requerido', 'Ingresa tu número de teléfono', 'warning');
+                return;
+            }
+            if (!serviceDate) {
+                Swal.fire('Fecha requerida', 'Selecciona la fecha del servicio', 'warning');
+                return;
+            }
+            
+            await sendOrderWithImage(phone, pendingPaymentImage, serviceDate, serviceTime);
+        });
+    }
+    
+    if (cancelPhoneBtn) {
+        cancelPhoneBtn.addEventListener('click', () => {
+            if (overlay) overlay.style.display = 'none';
+            if (phonePanel) phonePanel.style.display = 'none';
+            if (previewDiv) previewDiv.innerHTML = '';
+            pendingPaymentImage = null;
+            if (fileInput) fileInput.value = '';
+        });
+    }
+}
+
+function initializeTabs() {
+    document.querySelectorAll('[data-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-tab');
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            const tabContent = document.getElementById(`${tab}Tab`);
+            if (tabContent) tabContent.style.display = 'block';
+            document.querySelectorAll('[data-tab]').forEach(b => {
+                b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            
+            // Configurar validaciones cuando se abre el tab de registro
+            if (tab === 'register') {
+                setTimeout(setupRealTimeValidation, 100);
+            }
+        });
+    });
+}
+
+function initializeAuth() {
+    const doLoginBtn = document.getElementById('doLoginBtn');
+    const doRegisterBtn = document.getElementById('doRegisterBtn');
+    const doLogoutBtn = document.getElementById('doLogoutBtn');
+    
+    if (doLoginBtn) {
+        doLoginBtn.addEventListener('click', async () => {
+            const username = document.getElementById('loginUsername')?.value.trim();
+            const password = document.getElementById('loginPassword')?.value;
+            
+            doLoginBtn.disabled = true;
+            const originalText = doLoginBtn.innerHTML;
+            doLoginBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Ingresando...';
+            
+            const success = await login(username, password);
+            
+            if (!success) {
+                doLoginBtn.disabled = false;
+                doLoginBtn.innerHTML = originalText;
+            }
+        });
+    }
+    
+    if (doRegisterBtn) {
+        doRegisterBtn.addEventListener('click', async () => {
+            const username = document.getElementById('regUsername')?.value.trim();
+            const email = document.getElementById('regEmail')?.value.trim();
+            const phone = document.getElementById('regPhone')?.value.trim();
+            const password = document.getElementById('regPassword')?.value;
+            const confirm = document.getElementById('regConfirmPassword')?.value;
+            
+            doRegisterBtn.disabled = true;
+            const originalText = doRegisterBtn.innerHTML;
+            doRegisterBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Registrando...';
+            
+            const success = await register(username, email, phone, password, confirm);
+            
+            doRegisterBtn.disabled = false;
+            doRegisterBtn.innerHTML = originalText;
+            
+            if (success) {
+                // Limpiar formulario
+                const inputs = ['regUsername', 'regEmail', 'regPhone', 'regPassword', 'regConfirmPassword'];
+                inputs.forEach(id => {
+                    const input = document.getElementById(id);
+                    if (input) {
+                        input.value = '';
+                        input.classList.remove('is-valid', 'is-invalid');
+                    }
+                });
+                
+                // Limpiar medidor
+                const strengthFill = document.getElementById('strengthFill');
+                const strengthText = document.getElementById('strengthText');
+                if (strengthFill) strengthFill.style.width = '0%';
+                if (strengthText) strengthText.textContent = '';
+                
+                // Cambiar a login
+                const loginTab = document.querySelector('[data-tab="login"]');
+                if (loginTab) loginTab.click();
+            }
+        });
+    }
+    
+    if (doLogoutBtn) {
+        doLogoutBtn.addEventListener('click', () => {
+            logout();
+            const userPanel = document.getElementById('userPanel');
+            if (userPanel) userPanel.style.display = 'none';
+        });
+    }
+}
+
+// ==================== ANIMACIONES CSS ADICIONALES ====================
+const styleSheet = document.createElement('style');
+styleSheet.textContent = `
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+    }
+    .is-invalid {
+        animation: shake 0.3s ease-in-out;
+    }
+    .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+        border-width: 0.2em;
+    }
+    .btn-gold:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none;
+    }
+`;
+document.head.appendChild(styleSheet);
+
+// ==================== INICIALIZACIÓN PRINCIPAL ====================
+document.addEventListener('DOMContentLoaded', async () => {
+    const savedToken = localStorage.getItem('authToken');
+    const savedUser = localStorage.getItem('currentUser');
+    
+    if (savedToken && savedUser) {
+        authToken = savedToken;
+        currentUser = JSON.parse(savedUser);
+        updateUserUI();
+        await loadUserCart();
+    }
+    
+    if (document.getElementById('barrasGrid')) {
+        await renderBarras();
+    }
+    
+    if (document.getElementById('promoGrid')) {
+        await renderPromociones();
     }
     
     initializePanels();
