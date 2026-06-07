@@ -812,7 +812,6 @@ async function exportarPedidosExcel(pedidosData = null) {
             };
         });
         
-        // Usar XLSX del CDN (global)
         const ws = XLSX.utils.json_to_sheet(excelData);
         
         const colWidths = [
@@ -1481,6 +1480,9 @@ document.addEventListener('DOMContentLoaded', () => {
 loadDashboard();
 loadBarras();
 loadPromociones();
+loadPedidos();
+loadUsuarios();
+loadImages();
 loadPedidos();
 loadUsuarios();
 loadImages();
