@@ -43,8 +43,8 @@ app.use('/comprobantes', express.static(comprobantesPath));
 
 // Importar rutas API (AJUSTA LOS NOMBRES SEGÚN TUS ARCHIVOS)
 const authRoutes = require('./routes/auth');
-const productsRoutes = require('./routes/productos');  // Cambiado de 'products' a 'productos'
-const cartRoutes = require('./routes/carrito');       // Cambiado de 'cart' a 'carrito'
+const productsRoutes = require('./routes/products');  // Cambiado de 'products' a 'productos'
+const cartRoutes = require('./routes/cart');       // Cambiado de 'cart' a 'carrito'
 const ordersRoutes = require('./routes/orders');
 const adminRoutes = require('./routes/admin');
 const uploadRoutes = require('./routes/upload');
