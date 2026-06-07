@@ -7,40 +7,114 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const JWT_SECRET = 'la-pomme-secret-key-2026';
 
-// Registro (usuario y contraseña solamente)
+// Función para validar y formatear número de teléfono mexicano
+function validateAndFormatPhone(phone) {
+    if (!phone || phone.trim() === '') {
+        return null;
+    }
+    
+    // Limpiar el número: eliminar espacios, guiones, etc.
+    let cleanPhone = phone.toString().replace(/[\s\-\(\)]/g, '');
+    
+    // Si ya tiene +52 al inicio, mantenerlo
+    if (cleanPhone.startsWith('+52')) {
+        cleanPhone = cleanPhone.substring(1); // Quitar el + para guardar
+        if (/^52\d{10}$/.test(cleanPhone)) {
+            return cleanPhone;
+        }
+    }
+    
+    // Si ya tiene 52 al inicio (sin +)
+    if (cleanPhone.startsWith('52') && /^52\d{10}$/.test(cleanPhone)) {
+        return cleanPhone;
+    }
+    
+    // Si son 10 dígitos, agregar 52
+    if (/^\d{10}$/.test(cleanPhone)) {
+        return '52' + cleanPhone;
+    }
+    
+    // Formato inválido
+    return null;
+}
+
+// Registro con validación de teléfono mexicano
 router.post('/register', async (req, res) => {
     const { username, email, phone, password } = req.body;
-    const db = getDb();
+    const supabase = getDb();
     
-    // Si no vienen email o teléfono, asignar valores por defecto
+    // Validar teléfono (obligatorio)
+    if (!phone || phone.trim() === '') {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'El número de teléfono es requerido' 
+        });
+    }
+    
+    // Validar y formatear teléfono con +52
+    const formattedPhone = validateAndFormatPhone(phone);
+    
+    if (!formattedPhone) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Número de teléfono inválido. Debe ser un número mexicano de 10 dígitos (ej: 9381770841) o incluir 52 (ej: 529381770841)' 
+        });
+    }
+    
+    // Si no viene email, asignar por defecto
     const userEmail = email || `${username}@usuario.com`;
-    const userPhone = phone || '521000000000';
     
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        await db.run(
-            'INSERT INTO users (username, email, phone, password, role) VALUES (?, ?, ?, ?, ?)',
-            [username, userEmail, userPhone, hashedPassword, 'user']
-        );
         
-        res.json({ success: true, message: 'Usuario registrado exitosamente' });
-    } catch (error) {
-        if (error.message.includes('UNIQUE constraint failed')) {
-            res.status(400).json({ success: false, message: 'El usuario ya existe' });
-        } else {
-            console.error('Error en registro:', error);
-            res.status(500).json({ success: false, message: error.message });
+        const { data, error } = await supabase
+            .from('users')
+            .insert([{
+                username: username.trim(),
+                email: userEmail,
+                phone: formattedPhone,
+                password: hashedPassword,
+                role: 'user'
+            }])
+            .select();
+        
+        if (error) {
+            if (error.code === '23505') { // Unique violation
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'El usuario ya existe' 
+                });
+            }
+            throw error;
         }
+        
+        res.json({ 
+            success: true, 
+            message: 'Usuario registrado exitosamente',
+            phone: formattedPhone // Opcional: devolver el teléfono formateado
+        });
+        
+    } catch (error) {
+        console.error('Error en registro:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// Login
+// Login (sin cambios, solo adaptado a Supabase)
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
-    const db = getDb();
+    const supabase = getDb();
     
     try {
-        const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .limit(1);
+        
+        if (error) throw error;
+        
+        const user = users?.[0];
         
         if (!user) {
             return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
@@ -70,17 +144,17 @@ router.post('/login', async (req, res) => {
             }
         });
     } catch (error) {
+        console.error('Error en login:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// Cambiar contraseña (solo para clientes, no admin)
+// Cambiar contraseña (adaptado a Supabase)
 router.post('/change-password', authenticateToken, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
-    const db = getDb();
+    const supabase = getDb();
     
-    // Admin no puede cambiar su contraseña desde aquí
     if (req.user.role === 'admin') {
         return res.status(403).json({ 
             success: false, 
@@ -97,7 +171,15 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     }
     
     try {
-        const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+        const { data: users, error: findError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .limit(1);
+        
+        if (findError) throw findError;
+        
+        const user = users?.[0];
         
         if (!user) {
             return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
@@ -110,7 +192,13 @@ router.post('/change-password', authenticateToken, async (req, res) => {
         }
         
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-        await db.run('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+        
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ password: hashedNewPassword })
+            .eq('id', userId);
+        
+        if (updateError) throw updateError;
         
         res.json({ success: true, message: 'Contraseña actualizada exitosamente' });
         
@@ -120,7 +208,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     }
 });
 
-// Verificar token
+// Verificar token (adaptado a Supabase)
 router.post('/verify', async (req, res) => {
     const token = req.headers.authorization?.split(' ')[1];
     
@@ -130,8 +218,17 @@ router.post('/verify', async (req, res) => {
     
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        const db = getDb();
-        const user = await db.get('SELECT id, username, email, phone, role FROM users WHERE id = ?', [decoded.id]);
+        const supabase = getDb();
+        
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('id, username, email, phone, role')
+            .eq('id', decoded.id)
+            .limit(1);
+        
+        if (error) throw error;
+        
+        const user = users?.[0];
         
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
