@@ -7,7 +7,7 @@ let cart = [];
 const CONFIG = {
     WHATSAPP_NUMBER: "529381770841", // Número corregido: +52 9381770841
     BANK: {
-        name: "BBVA México",
+        name: "BBVA México, el abono inicial minimo es de la mitad del total del pedido",
         account: "1234 5678 9012 3456",
         clabe: "012 345 6789 01234567 8"
     },
