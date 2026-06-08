@@ -8,7 +8,8 @@ const CONFIG = {
     WHATSAPP_NUMBER: "529381770841", // Número corregido: +52 9381770841
     BANK: {
         name: "Banamex, el abono inicial minimo es de la mitad del total del pedido",
-        clabe: "5256786188248391"
+        account: "5256786188248391",
+        clabe: "0020 5290 5281 9164 88"
     },
     MIN_ADVANCE_DAYS: 2
 };
