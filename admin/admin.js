@@ -912,296 +912,35 @@ function exportarPedidosExcelFiltrados() {
     });
 }
 
-// ==================== EXPORTAR A PDF ====================
+// Modifica tu función loadPedidos para guardar los datos globalmente
+let pedidosGlobal = []; // Variable global al inicio
 
-async function exportarPedidosPDF(pedidosData = null) {
+async function loadPedidos() {
     try {
-        let pedidos = pedidosData;
-        if (!pedidos) {
-            const res = await fetch(`${API_URL}/admin/pedidos`, { headers });
-            const data = await res.json();
-            if (!data.success) throw new Error('Error al cargar pedidos');
-            pedidos = data.data;
+        const res = await fetch(`${API_URL}/pedidos`, { headers });
+        const data = await res.json();
+        if (data.success && data.pedidos) {
+            pedidosGlobal = data.pedidos; // Guardar globalmente
+            // Resto de tu código para mostrar en la tabla...
         }
-        
-        if (!pedidos || pedidos.length === 0) {
-            Swal.fire('Sin datos', 'No hay pedidos para exportar', 'warning');
-            return;
-        }
-        
-        const totalIngresos = pedidos.reduce((sum, p) => sum + p.total, 0);
-        const pedidosPagados = pedidos.filter(p => p.status === 'pagado').length;
-        const pedidosPendientes = pedidos.filter(p => p.status === 'pendiente').length;
-        const pedidosCompletados = pedidos.filter(p => p.status === 'completado').length;
-        
-        const tableBody = pedidos.map(pedido => {
-            const fechaPedido = new Date(pedido.created_at).toLocaleDateString('es-MX');
-            const estadoTexto = {
-                'pendiente': 'Pendiente',
-                'pagado': 'Pagado',
-                'completado': 'Completado',
-                'cancelado': 'Cancelado'
-            }[pedido.status] || pedido.status;
-            
-            const productosResumen = pedido.detalles.map(d => {
-                if (d.cantidad_personas) {
-                    return `${d.item_name} (${d.cantidad_personas} pers)`;
-                }
-                return `${d.item_name} x${d.quantity}`;
-            }).join(', ');
-            
-            return [
-                pedido.id.toString(),
-                pedido.username,
-                fechaPedido,
-                productosResumen.length > 40 ? productosResumen.substring(0, 40) + '...' : productosResumen,
-                `$${pedido.total.toFixed(2)}`,
-                estadoTexto
-            ];
-        });
-        
-        const docDefinition = {
-            pageOrientation: 'landscape',
-            pageSize: 'A4',
-            pageMargins: [40, 60, 40, 40],
-            header: function() {
-                return {
-                    columns: [
-                        {
-                            text: 'LA POMME SNACKS',
-                            style: 'headerTitle',
-                            alignment: 'left'
-                        },
-                        {
-                            text: `Fecha: ${new Date().toLocaleDateString('es-MX')}`,
-                            style: 'headerDate',
-                            alignment: 'right'
-                        }
-                    ],
-                    margin: [40, 20, 40, 0]
-                };
-            },
-            content: [
-                {
-                    text: '📊 REPORTE DE PEDIDOS',
-                    style: 'title',
-                    alignment: 'center',
-                    margin: [0, 0, 0, 10]
-                },
-                {
-                    text: `Total de pedidos: ${pedidos.length}`,
-                    style: 'subtitle',
-                    alignment: 'center',
-                    margin: [0, 0, 0, 20]
-                },
-                {
-                    columns: [
-                        {
-                            width: '*',
-                            stack: [
-                                { text: '💰 Total Ingresos', style: 'cardTitle', alignment: 'center' },
-                                { text: `$${totalIngresos.toLocaleString('es-MX')}`, style: 'cardValue', alignment: 'center' }
-                            ],
-                            margin: [0, 0, 10, 0],
-                            fillColor: '#f0f9f0'
-                        },
-                        {
-                            width: '*',
-                            stack: [
-                                { text: '✅ Pagados', style: 'cardTitle', alignment: 'center' },
-                                { text: pedidosPagados.toString(), style: 'cardValue', alignment: 'center' }
-                            ],
-                            margin: [0, 0, 10, 0],
-                            fillColor: '#e8f5e9'
-                        },
-                        {
-                            width: '*',
-                            stack: [
-                                { text: '📝 Pendientes', style: 'cardTitle', alignment: 'center' },
-                                { text: pedidosPendientes.toString(), style: 'cardValue', alignment: 'center' }
-                            ],
-                            margin: [0, 0, 10, 0],
-                            fillColor: '#fff3e0'
-                        },
-                        {
-                            width: '*',
-                            stack: [
-                                { text: '🎉 Completados', style: 'cardTitle', alignment: 'center' },
-                                { text: pedidosCompletados.toString(), style: 'cardValue', alignment: 'center' }
-                            ],
-                            margin: [0, 0, 0, 0],
-                            fillColor: '#e3f2fd'
-                        }
-                    ],
-                    margin: [0, 0, 0, 20]
-                },
-                {
-                    style: 'tableExample',
-                    table: {
-                        headerRows: 1,
-                        widths: [40, 80, 70, '*', 60, 70],
-                        body: [
-                            [
-                                { text: 'ID', style: 'tableHeader', alignment: 'center' },
-                                { text: 'Cliente', style: 'tableHeader', alignment: 'center' },
-                                { text: 'Fecha', style: 'tableHeader', alignment: 'center' },
-                                { text: 'Productos', style: 'tableHeader', alignment: 'center' },
-                                { text: 'Total', style: 'tableHeader', alignment: 'center' },
-                                { text: 'Estado', style: 'tableHeader', alignment: 'center' }
-                            ],
-                            ...tableBody
-                        ]
-                    },
-                    layout: {
-                        fillColor: function(rowIndex, node, columnIndex) {
-                            return (rowIndex % 2 === 0) ? '#f9f9f9' : null;
-                        },
-                        hLineWidth: function(i, node) { return 0.5; },
-                        vLineWidth: function(i, node) { return 0.5; },
-                        hLineColor: function(i, node) { return '#dddddd'; },
-                        vLineColor: function(i, node) { return '#dddddd'; }
-                    }
-                },
-                {
-                    text: `\n\nTotal de pedidos: ${pedidos.length} | Ingresos totales: $${totalIngresos.toLocaleString('es-MX')}`,
-                    style: 'footer',
-                    alignment: 'center',
-                    margin: [0, 20, 0, 0]
-                }
-            ],
-            styles: {
-                title: {
-                    fontSize: 22,
-                    bold: true,
-                    color: '#d4af37',
-                    decoration: 'underline'
-                },
-                subtitle: {
-                    fontSize: 14,
-                    color: '#666666',
-                    italics: true
-                },
-                headerTitle: {
-                    fontSize: 12,
-                    bold: true,
-                    color: '#d4af37'
-                },
-                headerDate: {
-                    fontSize: 10,
-                    color: '#666666'
-                },
-                cardTitle: {
-                    fontSize: 11,
-                    bold: true,
-                    color: '#555555'
-                },
-                cardValue: {
-                    fontSize: 18,
-                    bold: true,
-                    color: '#d4af37',
-                    margin: [0, 5, 0, 5]
-                },
-                tableHeader: {
-                    fontSize: 11,
-                    bold: true,
-                    fillColor: '#d4af37',
-                    color: 'white',
-                    alignment: 'center'
-                },
-                footer: {
-                    fontSize: 9,
-                    color: '#999999',
-                    italics: true
-                }
-            },
-            defaultStyle: {
-                fontSize: 10
-            }
-        };
-        
-        pdfMake.createPdf(docDefinition).download(`reporte_pedidos_${new Date().toISOString().slice(0, 10)}.pdf`);
-        
-        Swal.fire({
-            icon: 'success',
-            title: 'PDF Generado',
-            text: `Se exportaron ${pedidos.length} pedidos a PDF`,
-            timer: 2000,
-            showConfirmButton: false
-        });
-        
-    } catch (error) {
-        console.error('Error exportando PDF:', error);
-        Swal.fire('Error', 'No se pudo generar el PDF: ' + error.message, 'error');
+    } catch(e) { 
+        console.error(e); 
     }
 }
 
-function exportarPedidosPDFFiltrados() {
-    Swal.fire({
-        title: 'Filtrar pedidos para PDF',
-        html: `
-            <div class="text-start">
-                <div class="mb-3">
-                    <label class="form-label">Filtrar por estado:</label>
-                    <select id="filtroEstadoPDF" class="form-select">
-                        <option value="todos">Todos</option>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="pagado">Pagado</option>
-                        <option value="completado">Completado</option>
-                        <option value="cancelado">Cancelado</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Fecha desde:</label>
-                    <input type="date" id="filtroFechaDesdePDF" class="form-control">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Fecha hasta:</label>
-                    <input type="date" id="filtroFechaHastaPDF" class="form-control">
-                </div>
-            </div>
-        `,
-        confirmButtonText: 'Generar PDF',
-        confirmButtonColor: '#dc3545',
-        showCancelButton: true,
-        cancelButtonText: 'Cancelar',
-        preConfirm: () => {
-            const estado = document.getElementById('filtroEstadoPDF').value;
-            const fechaDesde = document.getElementById('filtroFechaDesdePDF').value;
-            const fechaHasta = document.getElementById('filtroFechaHastaPDF').value;
-            return { estado, fechaDesde, fechaHasta };
-        }
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            const { estado, fechaDesde, fechaHasta } = result.value;
-            
-            const res = await fetch(`${API_URL}/admin/pedidos`, { headers });
-            const data = await res.json();
-            
-            if (data.success) {
-                let pedidosFiltrados = data.data;
-                
-                if (estado !== 'todos') {
-                    pedidosFiltrados = pedidosFiltrados.filter(p => p.status === estado);
-                }
-                if (fechaDesde) {
-                    const desde = new Date(fechaDesde);
-                    pedidosFiltrados = pedidosFiltrados.filter(p => new Date(p.created_at) >= desde);
-                }
-                if (fechaHasta) {
-                    const hasta = new Date(fechaHasta);
-                    hasta.setHours(23, 59, 59);
-                    pedidosFiltrados = pedidosFiltrados.filter(p => new Date(p.created_at) <= hasta);
-                }
-                
-                if (pedidosFiltrados.length === 0) {
-                    Swal.fire('Sin resultados', 'No hay pedidos con esos filtros', 'warning');
-                    return;
-                }
-                
-                await exportarPedidosPDF(pedidosFiltrados);
-            }
-        }
-    });
+// Luego simplificas las funciones de exportación:
+async function exportarPedidosPDF() {
+    if (!pedidosGlobal || pedidosGlobal.length === 0) {
+        Swal.fire('Sin datos', 'No hay pedidos para exportar', 'warning');
+        return;
+    }
+    generarPDFPedidos(pedidosGlobal, 'Todos los Pedidos');
+}
+
+async function exportarPedidosPDFFiltrados() {
+    // Si tienes filtros, aplicarlos a pedidosGlobal
+    const pedidosFiltrados = filtrarPedidos(pedidosGlobal); // Implementa según tus filtros
+    generarPDFPedidos(pedidosFiltrados, 'Pedidos Filtrados');
 }
 
 // ==================== USUARIOS ====================
