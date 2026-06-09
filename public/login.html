@@ -240,7 +240,7 @@
                         <div class="alert alert-info mb-3">
                             <i class="fas fa-info-circle me-2"></i>
                             <strong>Credenciales de prueba:</strong><br>
-                            
+                            Usuario: admin / Contraseña: admin123
                         </div>
                         <button type="submit" class="btn-gold mb-3" id="loginBtn">
                             <i class="fas fa-arrow-right-to-bracket me-2"></i>Ingresar
@@ -251,29 +251,31 @@
                 <!-- Register Panel -->
                 <div class="tab-pane fade" id="registerPanel">
                     <form id="registerForm">
-                        <!-- Usuario -->
+                        <!-- Usuario (sin espacios) -->
                         <div class="mb-3">
                             <label class="form-label fw-bold"><i class="fas fa-user me-1"></i> Usuario</label>
                             <input type="text" id="regUser" class="form-control" placeholder="Ej: juan_perez" required>
                             <div class="invalid-feedback" id="userError"></div>
                             <div class="valid-feedback" id="userValid">✓ Usuario válido</div>
+                            <small class="text-muted">Mínimo 3 caracteres. Solo letras, números, _ y . Sin espacios.</small>
                         </div>
                         
                         <!-- Correo -->
                         <div class="mb-3">
                             <label class="form-label fw-bold"><i class="fas fa-envelope me-1"></i> Correo electrónico</label>
-                            <input type="email" id="regEmail" class="form-control" placeholder="tu@email.com" required>
+                            <input type="email" id="regEmail" class="form-control" placeholder="tu@email.com">
                             <div class="invalid-feedback" id="emailError"></div>
                             <div class="valid-feedback" id="emailValid">✓ Correo válido</div>
+                            <small class="text-muted">Opcional</small>
                         </div>
                         
                         <!-- Teléfono -->
                         <div class="mb-3">
                             <label class="form-label fw-bold"><i class="fab fa-whatsapp me-1"></i> Teléfono (WhatsApp)</label>
-                            <input type="tel" id="regPhone" class="form-control" placeholder="Ej: 521234567890" required>
+                            <input type="tel" id="regPhone" class="form-control" placeholder="Ej: 9381770841" required>
                             <div class="invalid-feedback" id="phoneError"></div>
                             <div class="valid-feedback" id="phoneValid">✓ Teléfono válido</div>
-                            <small class="text-muted">Formato: 521 + 10 dígitos</small>
+                            <small class="text-muted">Número mexicano de 10 dígitos</small>
                         </div>
                         
                         <!-- Contraseña -->
@@ -289,6 +291,7 @@
                             <div class="strength-text" id="strengthText"></div>
                             <div class="invalid-feedback" id="pwdError"></div>
                             <div class="valid-feedback" id="pwdValid">✓ Contraseña válida</div>
+                            <small class="text-muted">Mínimo 4 caracteres</small>
                         </div>
                         
                         <!-- Confirmar contraseña -->
@@ -316,379 +319,325 @@
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
- <script  const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { getDb } = require('../db');
-const { authenticateToken } = require('../middleware/auth');
-
-const router = express.Router();
-const JWT_SECRET = 'la-pomme-secret-key-2026';
-
-// ==================== FUNCIONES DE VALIDACIÓN ====================
-
-// Validar username (sin espacios, caracteres permitidos)
-function validateUsername(username) {
-    if (!username || username.trim() === '') {
-        return { valid: false, message: 'El nombre de usuario es requerido' };
-    }
-    
-    // Verificar que no contenga espacios
-    if (username.includes(' ')) {
-        return { valid: false, message: 'El nombre de usuario no puede contener espacios' };
-    }
-    
-    // Verificar longitud mínima
-    if (username.length < 3) {
-        return { valid: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' };
-    }
-    
-    // Verificar caracteres permitidos (letras, números, guión bajo, punto)
-    const validRegex = /^[a-zA-Z0-9_.]+$/;
-    if (!validRegex.test(username)) {
-        return { valid: false, message: 'El nombre de usuario solo puede contener letras, números, guión bajo (_) y punto (.)' };
-    }
-    
-    return { valid: true };
-}
-
-// Validar email
-function validateEmail(email) {
-    if (!email) return { valid: true }; // Email es opcional
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        return { valid: false, message: 'El correo electrónico no es válido' };
-    }
-    
-    return { valid: true };
-}
-
-// Validar y formatear número de teléfono mexicano
-function validateAndFormatPhone(phone) {
-    if (!phone || phone.trim() === '') {
-        return { valid: false, message: 'El número de teléfono es requerido' };
-    }
-    
-    // Limpiar el número: eliminar espacios, guiones, etc.
-    let cleanPhone = phone.toString().replace(/[\s\-\(\)]/g, '');
-    
-    // Si ya tiene +52 al inicio, mantenerlo
-    if (cleanPhone.startsWith('+52')) {
-        cleanPhone = cleanPhone.substring(1); // Quitar el + para guardar
-        if (/^52\d{10}$/.test(cleanPhone)) {
-            return { valid: true, phone: cleanPhone };
-        }
-    }
-    
-    // Si ya tiene 52 al inicio (sin +)
-    if (cleanPhone.startsWith('52') && /^52\d{10}$/.test(cleanPhone)) {
-        return { valid: true, phone: cleanPhone };
-    }
-    
-    // Si son 10 dígitos, agregar 52
-    if (/^\d{10}$/.test(cleanPhone)) {
-        return { valid: true, phone: '52' + cleanPhone };
-    }
-    
-    // Formato inválido
-    return { valid: false, message: 'Número de teléfono inválido. Debe ser un número mexicano de 10 dígitos (ej: 9381770841) o incluir 52 (ej: 529381770841)' };
-}
-
-// Validar contraseña
-function validatePassword(password) {
-    if (!password) {
-        return { valid: false, message: 'La contraseña es requerida' };
-    }
-    
-    if (password.length < 4) {
-        return { valid: false, message: 'La contraseña debe tener al menos 4 caracteres' };
-    }
-    
-    return { valid: true };
-}
-
-// ==================== REGISTRO DE USUARIO ====================
-router.post('/register', async (req, res) => {
-    const { username, email, phone, password } = req.body;
-    const supabase = getDb();
-    
-    // 1. Validar username (sin espacios)
-    const usernameValidation = validateUsername(username);
-    if (!usernameValidation.valid) {
-        return res.status(400).json({ 
-            success: false, 
-            message: usernameValidation.message 
-        });
-    }
-    
-    // 2. Validar email (si se proporciona)
-    if (email) {
-        const emailValidation = validateEmail(email);
-        if (!emailValidation.valid) {
-            return res.status(400).json({ 
-                success: false, 
-                message: emailValidation.message 
-            });
-        }
-    }
-    
-    // 3. Validar teléfono
-    const phoneValidation = validateAndFormatPhone(phone);
-    if (!phoneValidation.valid) {
-        return res.status(400).json({ 
-            success: false, 
-            message: phoneValidation.message 
-        });
-    }
-    
-    // 4. Validar contraseña
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-        return res.status(400).json({ 
-            success: false, 
-            message: passwordValidation.message 
-        });
-    }
-    
-    // Si no viene email, asignar por defecto
-    const userEmail = email || `${username.trim().toLowerCase()}@usuario.com`;
-    const formattedPhone = phoneValidation.phone;
-    const cleanUsername = username.trim().toLowerCase();
-    
-    try {
-        // Verificar si el username ya existe
-        const { data: existingUser, error: findError } = await supabase
-            .from('users')
-            .select('username')
-            .eq('username', cleanUsername)
-            .maybeSingle();
+    <script>
+        const API_URL = '/api';
         
-        if (findError && findError.code !== 'PGRST116') throw findError;
+        // ==================== FUNCIONES DE VALIDACIÓN ====================
         
-        if (existingUser) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'El nombre de usuario ya está en uso' 
-            });
+        // Validar username (sin espacios)
+        function validateUsername(username) {
+            if (!username || username.trim() === '') {
+                return { valid: false, message: 'El nombre de usuario es requerido' };
+            }
+            if (username.includes(' ')) {
+                return { valid: false, message: 'El nombre de usuario no puede contener espacios' };
+            }
+            if (username.length < 3) {
+                return { valid: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' };
+            }
+            const validRegex = /^[a-zA-Z0-9_.]+$/;
+            if (!validRegex.test(username)) {
+                return { valid: false, message: 'Solo letras, números, _ y .' };
+            }
+            return { valid: true };
         }
         
-        // Verificar si el teléfono ya existe
-        const { data: existingPhone, error: phoneError } = await supabase
-            .from('users')
-            .select('phone')
-            .eq('phone', formattedPhone)
-            .maybeSingle();
-        
-        if (phoneError && phoneError.code !== 'PGRST116') throw phoneError;
-        
-        if (existingPhone) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'El número de teléfono ya está registrado' 
-            });
+        // Validar email
+        function validateEmail(email) {
+            if (!email) return { valid: true };
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return { valid: emailRegex.test(email), message: 'Correo inválido' };
         }
         
-        // Hashear contraseña
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Validar teléfono mexicano
+        function validatePhone(phone) {
+            if (!phone || phone.trim() === '') {
+                return { valid: false, message: 'El teléfono es requerido' };
+            }
+            const cleanPhone = phone.toString().replace(/[\s\-\(\)]/g, '');
+            const phoneRegex = /^(\d{10})$/;
+            if (phoneRegex.test(cleanPhone)) {
+                return { valid: true, phone: cleanPhone };
+            }
+            return { valid: false, message: 'Ingresa 10 dígitos (ej: 9381770841)' };
+        }
         
-        // Crear usuario
-        const { data, error } = await supabase
-            .from('users')
-            .insert([{
-                username: cleanUsername,
-                email: userEmail,
-                phone: formattedPhone,
-                password: hashedPassword,
-                role: 'user'
-            }])
-            .select();
+        // Validar contraseña
+        function validatePassword(password) {
+            if (!password) return { valid: false, message: 'La contraseña es requerida' };
+            if (password.length < 4) return { valid: false, message: 'Mínimo 4 caracteres' };
+            return { valid: true };
+        }
         
-        if (error) throw error;
+        // ==================== EVENTOS DE VALIDACIÓN EN TIEMPO REAL ====================
         
-        res.json({ 
-            success: true, 
-            message: 'Usuario registrado exitosamente',
-            user: {
-                id: data[0].id,
-                username: data[0].username,
-                email: data[0].email,
-                phone: data[0].phone
+        // Username
+        const regUser = document.getElementById('regUser');
+        const userError = document.getElementById('userError');
+        const userValid = document.getElementById('userValid');
+        
+        regUser.addEventListener('input', () => {
+            const validation = validateUsername(regUser.value);
+            if (!validation.valid) {
+                regUser.classList.add('is-invalid');
+                regUser.classList.remove('is-valid');
+                userError.textContent = validation.message;
+                userError.classList.add('show');
+                userValid.classList.remove('show');
+            } else {
+                regUser.classList.remove('is-invalid');
+                regUser.classList.add('is-valid');
+                userError.classList.remove('show');
+                userValid.classList.add('show');
             }
         });
         
-    } catch (error) {
-        console.error('Error en registro:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ==================== LOGIN ====================
-router.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-    const supabase = getDb();
-    
-    if (!username || !password) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'Usuario y contraseña son requeridos' 
-        });
-    }
-    
-    try {
-        const { data: users, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', username.toLowerCase())
-            .limit(1);
+        // Email
+        const regEmail = document.getElementById('regEmail');
+        const emailError = document.getElementById('emailError');
+        const emailValid = document.getElementById('emailValid');
         
-        if (error) throw error;
-        
-        const user = users?.[0];
-        
-        if (!user) {
-            return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
-        }
-        
-        const validPassword = await bcrypt.compare(password, user.password);
-        
-        if (!validPassword) {
-            return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
-        }
-        
-        const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-        );
-        
-        res.json({
-            success: true,
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                phone: user.phone,
-                role: user.role
+        regEmail.addEventListener('input', () => {
+            if (!regEmail.value) {
+                regEmail.classList.remove('is-invalid', 'is-valid');
+                emailError.classList.remove('show');
+                emailValid.classList.remove('show');
+                return;
+            }
+            const validation = validateEmail(regEmail.value);
+            if (!validation.valid) {
+                regEmail.classList.add('is-invalid');
+                regEmail.classList.remove('is-valid');
+                emailError.classList.add('show');
+                emailValid.classList.remove('show');
+            } else {
+                regEmail.classList.remove('is-invalid');
+                regEmail.classList.add('is-valid');
+                emailError.classList.remove('show');
+                emailValid.classList.add('show');
             }
         });
-    } catch (error) {
-        console.error('Error en login:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ==================== CAMBIAR CONTRASEÑA ====================
-router.post('/change-password', authenticateToken, async (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-    const userId = req.user.id;
-    const supabase = getDb();
-    
-    if (req.user.role === 'admin') {
-        return res.status(403).json({ 
-            success: false, 
-            message: 'Los administradores no pueden cambiar su contraseña desde esta sección' 
+        
+        // Teléfono
+        const regPhone = document.getElementById('regPhone');
+        const phoneError = document.getElementById('phoneError');
+        const phoneValid = document.getElementById('phoneValid');
+        
+        regPhone.addEventListener('input', () => {
+            const validation = validatePhone(regPhone.value);
+            if (!validation.valid) {
+                regPhone.classList.add('is-invalid');
+                regPhone.classList.remove('is-valid');
+                phoneError.textContent = validation.message;
+                phoneError.classList.add('show');
+                phoneValid.classList.remove('show');
+            } else {
+                regPhone.classList.remove('is-invalid');
+                regPhone.classList.add('is-valid');
+                phoneError.classList.remove('show');
+                phoneValid.classList.add('show');
+            }
         });
-    }
-    
-    const passwordValidation = validatePassword(newPassword);
-    if (!passwordValidation.valid) {
-        return res.status(400).json({ success: false, message: passwordValidation.message });
-    }
-    
-    try {
-        const { data: users, error: findError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
         
-        if (findError) throw findError;
+        // Contraseña
+        const regPassword = document.getElementById('regPassword');
+        const pwdError = document.getElementById('pwdError');
+        const pwdValid = document.getElementById('pwdValid');
+        const strengthFill = document.getElementById('strengthFill');
+        const strengthText = document.getElementById('strengthText');
         
-        if (!users) {
-            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        regPassword.addEventListener('input', () => {
+            const validation = validatePassword(regPassword.value);
+            if (!validation.valid) {
+                regPassword.classList.add('is-invalid');
+                regPassword.classList.remove('is-valid');
+                pwdError.textContent = validation.message;
+                pwdError.classList.add('show');
+                pwdValid.classList.remove('show');
+            } else {
+                regPassword.classList.remove('is-invalid');
+                regPassword.classList.add('is-valid');
+                pwdError.classList.remove('show');
+                pwdValid.classList.add('show');
+            }
+            
+            // Medidor de fuerza
+            const length = regPassword.value.length;
+            if (length === 0) {
+                strengthFill.style.width = '0%';
+                strengthFill.style.backgroundColor = '';
+                strengthText.textContent = '';
+            } else if (length < 4) {
+                strengthFill.style.width = '25%';
+                strengthFill.style.backgroundColor = '#dc3545';
+                strengthText.textContent = 'Débil';
+                strengthText.style.color = '#dc3545';
+            } else if (length < 6) {
+                strengthFill.style.width = '50%';
+                strengthFill.style.backgroundColor = '#ffc107';
+                strengthText.textContent = 'Media';
+                strengthText.style.color = '#ffc107';
+            } else {
+                strengthFill.style.width = '100%';
+                strengthFill.style.backgroundColor = '#28a745';
+                strengthText.textContent = 'Fuerte';
+                strengthText.style.color = '#28a745';
+            }
+            
+            checkConfirmPassword();
+        });
+        
+        // Confirmar contraseña
+        const regConfirmPassword = document.getElementById('regConfirmPassword');
+        const confirmError = document.getElementById('confirmError');
+        const confirmValid = document.getElementById('confirmValid');
+        
+        function checkConfirmPassword() {
+            if (!regConfirmPassword.value) return;
+            if (regPassword.value === regConfirmPassword.value && validatePassword(regPassword.value).valid) {
+                regConfirmPassword.classList.remove('is-invalid');
+                regConfirmPassword.classList.add('is-valid');
+                confirmError.classList.remove('show');
+                confirmValid.classList.add('show');
+            } else {
+                regConfirmPassword.classList.add('is-invalid');
+                regConfirmPassword.classList.remove('is-valid');
+                confirmError.textContent = 'Las contraseñas no coinciden';
+                confirmError.classList.add('show');
+                confirmValid.classList.remove('show');
+            }
         }
         
-        const validPassword = await bcrypt.compare(currentPassword, users.password);
+        regConfirmPassword.addEventListener('input', checkConfirmPassword);
         
-        if (!validPassword) {
-            return res.status(401).json({ success: false, message: 'Contraseña actual incorrecta' });
-        }
+        // ==================== MOSTRAR/OCULTAR CONTRASEÑA ====================
+        document.getElementById('togglePwd').addEventListener('click', () => {
+            const type = regPassword.getAttribute('type') === 'password' ? 'text' : 'password';
+            regPassword.setAttribute('type', type);
+            document.getElementById('togglePwd').classList.toggle('fa-eye');
+            document.getElementById('togglePwd').classList.toggle('fa-eye-slash');
+        });
         
-        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        document.getElementById('toggleConfirmPwd').addEventListener('click', () => {
+            const type = regConfirmPassword.getAttribute('type') === 'password' ? 'text' : 'password';
+            regConfirmPassword.setAttribute('type', type);
+            document.getElementById('toggleConfirmPwd').classList.toggle('fa-eye');
+            document.getElementById('toggleConfirmPwd').classList.toggle('fa-eye-slash');
+        });
         
-        const { error: updateError } = await supabase
-            .from('users')
-            .update({ password: hashedNewPassword })
-            .eq('id', userId);
+        // ==================== LOGIN ====================
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                Swal.fire('Error', 'Usuario y contraseña son requeridos', 'warning');
+                return;
+            }
+            
+            const loginBtn = document.getElementById('loginBtn');
+            const originalHtml = loginBtn.innerHTML;
+            loginBtn.innerHTML = '<span class="btn-spinner"></span> Ingresando...';
+            loginBtn.disabled = true;
+            
+            try {
+                const res = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    Swal.fire('Éxito', 'Inicio de sesión exitoso', 'success').then(() => {
+                        window.location.href = data.user.role === 'admin' ? '/admin' : '/';
+                    });
+                } else {
+                    Swal.fire('Error', data.message, 'error');
+                }
+            } catch (error) {
+                Swal.fire('Error', 'Error al conectar con el servidor', 'error');
+            } finally {
+                loginBtn.innerHTML = originalHtml;
+                loginBtn.disabled = false;
+            }
+        });
         
-        if (updateError) throw updateError;
-        
-        res.json({ success: true, message: 'Contraseña actualizada exitosamente' });
-        
-    } catch (error) {
-        console.error('Error al cambiar contraseña:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ==================== VERIFICAR TOKEN ====================
-router.post('/verify', async (req, res) => {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-        return res.status(401).json({ success: false, message: 'No token provided' });
-    }
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const supabase = getDb();
-        
-        const { data: users, error } = await supabase
-            .from('users')
-            .select('id, username, email, phone, role')
-            .eq('id', decoded.id)
-            .maybeSingle();
-        
-        if (error) throw error;
-        
-        if (!users) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        
-        res.json({ success: true, user: users });
-    } catch (error) {
-        res.status(401).json({ success: false, message: 'Invalid token' });
-    }
-});
-
-// ==================== OBTENER PERFIL DE USUARIO ====================
-router.get('/profile', authenticateToken, async (req, res) => {
-    const supabase = getDb();
-    const userId = req.user.id;
-    
-    try {
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id, username, email, phone, role, created_at')
-            .eq('id', userId)
-            .maybeSingle();
-        
-        if (error) throw error;
-        
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
-        }
-        
-        res.json({ success: true, user });
-    } catch (error) {
-        console.error('Error al obtener perfil:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-module.exports = router;
-</script>
+        // ==================== REGISTRO ====================
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Validaciones finales
+            const usernameValidation = validateUsername(regUser.value);
+            if (!usernameValidation.valid) {
+                Swal.fire('Error', usernameValidation.message, 'warning');
+                return;
+            }
+            
+            const phoneValidation = validatePhone(regPhone.value);
+            if (!phoneValidation.valid) {
+                Swal.fire('Error', phoneValidation.message, 'warning');
+                return;
+            }
+            
+            const passwordValidation = validatePassword(regPassword.value);
+            if (!passwordValidation.valid) {
+                Swal.fire('Error', passwordValidation.message, 'warning');
+                return;
+            }
+            
+            if (regPassword.value !== regConfirmPassword.value) {
+                Swal.fire('Error', 'Las contraseñas no coinciden', 'warning');
+                return;
+            }
+            
+            const registerBtn = document.getElementById('registerBtn');
+            const originalHtml = registerBtn.innerHTML;
+            registerBtn.innerHTML = '<span class="btn-spinner"></span> Registrando...';
+            registerBtn.disabled = true;
+            
+            try {
+                const res = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: regUser.value.trim().toLowerCase(),
+                        email: regEmail.value || '',
+                        phone: regPhone.value,
+                        password: regPassword.value
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    Swal.fire('Registro exitoso', 'Ahora puedes iniciar sesión', 'success').then(() => {
+                        document.getElementById('login-tab').click();
+                        document.getElementById('loginUsername').value = regUser.value.trim().toLowerCase();
+                        document.getElementById('loginPassword').value = '';
+                        document.getElementById('registerForm').reset();
+                        document.querySelectorAll('#registerForm .form-control').forEach(input => {
+                            input.classList.remove('is-valid', 'is-invalid');
+                        });
+                        document.querySelectorAll('#registerForm .invalid-feedback').forEach(el => el.classList.remove('show'));
+                        document.querySelectorAll('#registerForm .valid-feedback').forEach(el => el.classList.remove('show'));
+                        strengthFill.style.width = '0%';
+                        strengthText.textContent = '';
+                    });
+                } else {
+                    Swal.fire('Error', data.message, 'error');
+                }
+            } catch (error) {
+                Swal.fire('Error', 'Error al conectar con el servidor', 'error');
+            } finally {
+                registerBtn.innerHTML = originalHtml;
+                registerBtn.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>
