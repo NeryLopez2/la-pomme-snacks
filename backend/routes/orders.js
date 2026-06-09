@@ -28,7 +28,7 @@ if (accountSid && authToken) {
 
 // Datos bancarios
 const BANK = {
-    name: "Banamex",
+    name: "Banamex, el abono inicial minimo es de la mitad del total del pedido",
     account: "5256 7861 8824 8391",
     clabe: "0020 5290 5281 9164 88"
 };
