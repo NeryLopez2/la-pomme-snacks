@@ -912,7 +912,7 @@ function exportarPedidosExcelFiltrados() {
     });
 }
 
-// ==================== EXPORTAR A PDF CON PDFMAKE ====================
+// ==================== EXPORTAR A PDF ====================
 
 async function exportarPedidosPDF() {
     try {
@@ -931,7 +931,7 @@ async function exportarPedidosPDF() {
             return;
         }
         
-        generarPDFMake(data.data, 'Todos los Pedidos');
+        generarPDFPedidos(data.data, 'Todos los Pedidos');
         Swal.close();
         
     } catch (error) {
@@ -1022,7 +1022,7 @@ async function exportarPedidosPDFFiltrados() {
             return;
         }
         
-        generarPDFMake(pedidosFiltrados, 'Pedidos Filtrados');
+        generarPDFPedidos(pedidosFiltrados, 'Pedidos Filtrados');
         Swal.close();
         
     } catch (error) {
@@ -1032,54 +1032,46 @@ async function exportarPedidosPDFFiltrados() {
     }
 }
 
-function generarPDFMake(pedidos, titulo) {
-    // Verificar si pdfmake está disponible
-    if (typeof pdfMake === 'undefined') {
-        Swal.fire('Error', 'La librería pdfmake no está cargada', 'error');
+function generarPDFPedidos(pedidos, titulo) {
+    if (typeof window.jspdf === 'undefined') {
+        Swal.fire({
+            title: 'Librería no encontrada',
+            html: 'Debes incluir las librerías jsPDF en tu HTML:<br><br>' +
+                  '<code>&lt;script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"&gt;&lt;/script&gt;</code><br>' +
+                  '<code>&lt;script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"&gt;&lt;/script&gt;</code>',
+            icon: 'error'
+        });
         return;
     }
     
-    // Preparar los datos para la tabla
-    const body = [
-        [
-            { text: 'Pedido', style: 'header' },
-            { text: 'Cliente', style: 'header' },
-            { text: 'Fecha Pedido', style: 'header' },
-            { text: 'Fecha Servicio', style: 'header' },
-            { text: 'Total', style: 'header' },
-            { text: 'Estado', style: 'header' },
-            { text: 'Productos', style: 'header' }
-        ]
-    ];
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('landscape', 'mm', 'a4');
     
-    pedidos.forEach(pedido => {
+    doc.setFontSize(18);
+    doc.setTextColor(212, 175, 55);
+    doc.text(titulo, 14, 15);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generado: ${new Date().toLocaleString()}`, 14, 25);
+    
+    doc.setDrawColor(212, 175, 55);
+    doc.setLineWidth(0.5);
+    doc.line(14, 30, 290, 30);
+    
+    const tableData = pedidos.map(pedido => {
         const fechaPedido = new Date(pedido.created_at).toLocaleDateString('es-MX');
         const fechaServicio = pedido.fecha_servicio 
             ? new Date(pedido.fecha_servicio).toLocaleDateString('es-MX') 
             : 'No especificada';
         
         let estadoTexto = '';
-        let estadoColor = '';
         switch(pedido.status) {
-            case 'pendiente': 
-                estadoTexto = '📝 Pendiente'; 
-                estadoColor = '#ffc107';
-                break;
-            case 'pagado': 
-                estadoTexto = '✅ Pagado'; 
-                estadoColor = '#28a745';
-                break;
-            case 'completado': 
-                estadoTexto = '🎉 Completado'; 
-                estadoColor = '#17a2b8';
-                break;
-            case 'cancelado': 
-                estadoTexto = '❌ Cancelado'; 
-                estadoColor = '#dc3545';
-                break;
-            default: 
-                estadoTexto = pedido.status || '-';
-                estadoColor = '#6c757d';
+            case 'pendiente': estadoTexto = '📝 Pendiente'; break;
+            case 'pagado': estadoTexto = '✅ Pagado'; break;
+            case 'completado': estadoTexto = '🎉 Completado'; break;
+            case 'cancelado': estadoTexto = '❌ Cancelado'; break;
+            default: estadoTexto = pedido.status || '-';
         }
         
         const productosResumen = pedido.detalles?.map(d => {
@@ -1090,119 +1082,87 @@ function generarPDFMake(pedidos, titulo) {
             }
         }).join(', ') || '-';
         
-        body.push([
-            { text: `#${pedido.id}`, alignment: 'center' },
-            { text: pedido.username || '-' },
-            { text: fechaPedido, alignment: 'center' },
-            { text: fechaServicio, alignment: 'center' },
-            { text: `$${Number(pedido.total).toFixed(2)}`, alignment: 'right', bold: true, color: '#d4af37' },
-            { text: estadoTexto, alignment: 'center', color: estadoColor, bold: true },
-            { text: productosResumen.length > 50 ? productosResumen.substring(0, 47) + '...' : productosResumen }
-        ]);
+        return [
+            `#${pedido.id}`,
+            pedido.username || '-',
+            fechaPedido,
+            fechaServicio,
+            `$${Number(pedido.total).toFixed(2)}`,
+            estadoTexto,
+            productosResumen.substring(0, 40) + (productosResumen.length > 40 ? '...' : '')
+        ];
     });
     
-    // Calcular total general
-    const totalGeneral = pedidos.reduce((sum, p) => sum + (Number(p.total) || 0), 0);
+    const columns = ['Pedido', 'Cliente', 'Fecha Pedido', 'Fecha Servicio', 'Total', 'Estado', 'Productos'];
     
-    // Agregar fila de total
-    body.push([
-        { text: '', colSpan: 4 }, {}, {}, {},
-        { text: `TOTAL: $${totalGeneral.toFixed(2)}`, alignment: 'right', bold: true, fontSize: 12, color: '#d4af37', colSpan: 2 },
-        {},
-        {}
-    ]);
-    
-    // Definir el documento
-    const docDefinition = {
-        pageOrientation: 'landscape',
-        pageSize: 'A4',
-        pageMargins: [20, 40, 20, 30],
-        header: function() {
-            return {
-                margin: [20, 10, 20, 0],
-                layout: 'noBorders',
-                table: {
-                    widths: ['*'],
-                    body: [
-                        [{
-                            text: titulo,
-                            style: 'titulo',
-                            alignment: 'center',
-                            margin: [0, 0, 0, 5]
-                        }]
-                    ]
-                }
-            };
-        },
-        content: [
-            {
-                text: `Generado: ${new Date().toLocaleString()}`,
-                alignment: 'right',
-                fontSize: 9,
-                color: '#666',
-                margin: [0, 0, 0, 10]
-            },
-            {
-                table: {
-                    headerRows: 1,
-                    widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*'],
-                    body: body
-                },
-                layout: {
-                    fillColor: function(rowIndex, node, columnIndex) {
-                        return (rowIndex === 0) ? '#d4af37' : (rowIndex % 2 === 0) ? '#f9f9f9' : null;
-                    },
-                    hLineWidth: function(i, node) {
-                        return (i === 0 || i === node.table.body.length) ? 0.5 : 0.2;
-                    },
-                    vLineWidth: function(i, node) {
-                        return 0.2;
-                    },
-                    hLineColor: function(i, node) {
-                        return '#ddd';
-                    },
-                    vLineColor: function(i, node) {
-                        return '#ddd';
-                    }
-                }
-            },
-            {
-                text: `Total de pedidos: ${pedidos.length}`,
-                margin: [0, 20, 0, 0],
+    if (typeof doc.autoTable === 'function') {
+        doc.autoTable({
+            startY: 35,
+            head: [columns],
+            body: tableData,
+            theme: 'striped',
+            headStyles: {
+                fillColor: [212, 175, 55],
+                textColor: 255,
                 fontSize: 10,
-                alignment: 'left'
+                fontStyle: 'bold',
+                halign: 'center'
             },
-            {
-                text: `* Reporte generado automáticamente por el sistema`,
-                margin: [0, 10, 0, 0],
+            bodyStyles: {
                 fontSize: 8,
-                color: '#999',
-                alignment: 'center'
-            }
-        ],
-        styles: {
-            titulo: {
-                fontSize: 18,
-                bold: true,
-                color: '#d4af37'
+                cellPadding: 2
             },
-            header: {
-                fontSize: 11,
-                bold: true,
-                color: 'white',
-                alignment: 'center',
-                fillColor: '#d4af37'
+            columnStyles: {
+                0: { cellWidth: 20, halign: 'center' },
+                1: { cellWidth: 30 },
+                2: { cellWidth: 25, halign: 'center' },
+                3: { cellWidth: 25, halign: 'center' },
+                4: { cellWidth: 20, halign: 'right' },
+                5: { cellWidth: 25, halign: 'center' },
+                6: { cellWidth: 60 }
+            },
+            margin: { left: 14, right: 14 },
+            didDrawPage: (data) => {
+                const pageCount = doc.internal.getNumberOfPages();
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text(
+                    `Página ${data.pageNumber} de ${pageCount}`,
+                    doc.internal.pageSize.width - 20,
+                    doc.internal.pageSize.height - 10
+                );
             }
-        },
-        defaultStyle: {
-            fontSize: 9,
-            cellPadding: 5
-        }
-    };
+        });
+        
+        const finalY = doc.lastAutoTable.finalY + 10;
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Total de pedidos: ${pedidos.length}`, 14, finalY);
+        
+        const totalGeneral = pedidos.reduce((sum, p) => sum + (Number(p.total) || 0), 0);
+        doc.setFontSize(12);
+        doc.setTextColor(212, 175, 55);
+        doc.text(`Total General: $${totalGeneral.toFixed(2)}`, 14, finalY + 7);
+        
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`* Reporte generado automáticamente por el sistema`, 14, finalY + 15);
+    } else {
+        let y = 40;
+        doc.setFontSize(9);
+        
+        pedidos.forEach((pedido, index) => {
+            if (y > 270) {
+                doc.addPage();
+                y = 20;
+            }
+            doc.text(`${index + 1}. Pedido #${pedido.id} - ${pedido.username} - $${pedido.total} - ${pedido.status}`, 14, y);
+            y += 6;
+        });
+    }
     
-    // Generar y descargar el PDF
     const nombreArchivo = `pedidos_${titulo.toLowerCase().replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    pdfMake.createPdf(docDefinition).download(nombreArchivo);
+    doc.save(nombreArchivo);
     
     Swal.fire({
         icon: 'success',
@@ -1211,7 +1171,6 @@ function generarPDFMake(pedidos, titulo) {
         timer: 2000,
         showConfirmButton: false
     });
-}
 }
 
 // ==================== USUARIOS ====================
