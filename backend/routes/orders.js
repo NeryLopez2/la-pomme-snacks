@@ -10,17 +10,21 @@ const router = express.Router();
 // ==================== CONFIGURACIÓN ====================
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
-// ==================== USAR VARIABLES DE ENTORNO (SEGURAS) ====================
+// ==================== VARIABLES DE ENTORNO CORREGIDAS ====================
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioNumber = process.env.TWILIO_PHONE_NUMBER || '+14155238886';
-const empresaWhatsapp = process.env.EMPRESA_WHATSAPP || '+529381770841';
+// ✅ Número SANDBOX de Twilio (NUNCA tu número personal)
+const twilioSandboxNumber = process.env.TWILIO_SANDBOX_NUMBER || '+14155238886';
+// ✅ Tu número personal para recibir notificaciones (DEBE estar en el Sandbox)
+const ownerNumber = process.env.OWNER_WHATSAPP || '+529381951559';
 
 // Verificar si Twilio está configurado
 let twilioClient = null;
 if (accountSid && authToken) {
     twilioClient = new twilio(accountSid, authToken);
     console.log('✅ Twilio configurado correctamente');
+    console.log(`📱 Número Sandbox: ${twilioSandboxNumber}`);
+    console.log(`👤 Número del dueño: ${ownerNumber}`);
 } else {
     console.log('⚠️ Twilio no configurado. Las notificaciones de WhatsApp no funcionarán.');
     console.log('   Configura TWILIO_ACCOUNT_SID y TWILIO_AUTH_TOKEN en variables de entorno');
@@ -33,7 +37,7 @@ const BANK = {
     clabe: "0020 5290 5281 9164 88"
 };
 
-// ==================== FUNCIÓN PARA ENVIAR MENSAJE ====================
+// ==================== FUNCIÓN PARA ENVIAR MENSAJE CORREGIDA ====================
 async function enviarWhatsAppTexto(numero, mensaje) {
     if (!twilioClient) {
         console.log('⚠️ Twilio no disponible, no se envió mensaje');
@@ -43,12 +47,19 @@ async function enviarWhatsAppTexto(numero, mensaje) {
     }
     
     try {
+        // Limpiar número (solo dígitos)
         let num = numero.toString().replace(/\D/g, '');
         if (!num.startsWith('52')) num = '52' + num;
-        const destino = `whatsapp:+${num}`;
-        const origen = `whatsapp:${twilioNumber}`;
         
-        console.log(`📤 Enviando a: ${destino}`);
+        // ✅ IMPORTANTE: FROM siempre es el Sandbox de Twilio
+        // ✅ TO: el número destino con prefijo whatsapp:
+        const destino = `whatsapp:+${num}`;
+        const origen = `whatsapp:${twilioSandboxNumber}`;
+        
+        console.log(`📤 Enviando WhatsApp...`);
+        console.log(`   Desde: ${origen}`);
+        console.log(`   Hacia: ${destino}`);
+        console.log(`   Mensaje: ${mensaje.substring(0, 100)}...`);
         
         const result = await twilioClient.messages.create({
             from: origen,
@@ -60,7 +71,21 @@ async function enviarWhatsAppTexto(numero, mensaje) {
         return true;
         
     } catch (error) {
-        console.error(`❌ Error:`, error.message);
+        console.error(`❌ Error al enviar WhatsApp:`);
+        console.error(`   Código: ${error.code}`);
+        console.error(`   Mensaje: ${error.message}`);
+        
+        if (error.code === 21214) {
+            console.error(`\n⚠️⚠️⚠️ ERROR IMPORTANTE ⚠️⚠️⚠️`);
+            console.error(`El número ${numero} NO está registrado en el Sandbox.`);
+            console.error(`Para solucionarlo:`);
+            console.error(`1. Abre WhatsApp en tu teléfono`);
+            console.error(`2. Envía un mensaje al número ${twilioSandboxNumber}`);
+            console.error(`3. Escribe el código de invitación que ves en la consola de Twilio`);
+            console.error(`4. Espera la confirmación`);
+            console.error(`5. Vuelve a intentar`);
+        }
+        
         return false;
     }
 }
@@ -70,6 +95,32 @@ const handleError = (error, res, message = 'Error en el servidor') => {
     console.error(message, error);
     res.status(500).json({ success: false, message: error.message || message });
 };
+
+// ==================== RUTA DE PRUEBA PARA WHATSAPP ====================
+router.get('/test-whatsapp', async (req, res) => {
+    const mensajePrueba = `🧪 *MENSAJE DE PRUEBA* 🧪
+
+✅ Tu conexión a WhatsApp está funcionando correctamente.
+
+📡 Configuración actual:
+━━━━━━━━━━━━━━━━━━━━
+┃  📱 Sandbox: ${twilioSandboxNumber}
+┃  👤 Dueño: ${ownerNumber}
+━━━━━━━━━━━━━━━━━━━━
+
+🍎 La Pomme Snacks
+⏰ ${new Date().toLocaleString()}`;
+
+    const result = await enviarWhatsAppTexto(ownerNumber, mensajePrueba);
+    
+    res.json({ 
+        success: result, 
+        message: result ? '✅ Mensaje de prueba enviado correctamente' : '❌ Error al enviar mensaje de prueba',
+        sandboxNumber: twilioSandboxNumber,
+        ownerNumber: ownerNumber,
+        instrucciones: result ? null : 'Envía "join [código]" al ' + twilioSandboxNumber
+    });
+});
 
 // ==================== CREAR PEDIDO ====================
 router.post('/create', authenticateToken, async (req, res) => {
@@ -107,7 +158,7 @@ router.post('/create', authenticateToken, async (req, res) => {
         }
         
         // Obtener usuario
-        const { data: users, error: userError } = await supabase
+        const { data: user, error: userError } = await supabase
             .from('users')
             .select('*')
             .eq('id', userId)
@@ -115,7 +166,6 @@ router.post('/create', authenticateToken, async (req, res) => {
         
         if (userError) throw userError;
         
-        const user = users;
         let telefonoCliente = phoneNumber || user.phone;
         
         if (!telefonoCliente) {
@@ -270,7 +320,14 @@ ${productosTexto}
 
         // ==================== ENVIAR AL DUEÑO ====================
         console.log('\n📤 Enviando mensaje al DUEÑO...');
-        await enviarWhatsAppTexto(empresaWhatsapp, mensajeDueño);
+        console.log(`📱 Número del dueño: ${ownerNumber}`);
+        const envioDueño = await enviarWhatsAppTexto(ownerNumber, mensajeDueño);
+        
+        if (envioDueño) {
+            console.log('✅ Mensaje al dueño enviado correctamente');
+        } else {
+            console.log('⚠️ No se pudo enviar el mensaje al dueño');
+        }
         
         // Vaciar carrito
         const { error: clearError } = await supabase
@@ -286,7 +343,8 @@ ${productosTexto}
         res.json({ 
             success: true, 
             message: '✅ Pedido enviado correctamente. Puedes ver el estado en "Mis Pedidos".',
-            pedidoId
+            pedidoId,
+            notificacionEnviada: envioDueño
         });
         
     } catch (error) {
