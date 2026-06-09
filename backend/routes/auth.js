@@ -7,6 +7,31 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const JWT_SECRET = 'la-pomme-secret-key-2026';
 
+// Función para validar que no tenga espacios
+function validateUsername(username) {
+    if (!username || username.trim() === '') {
+        return { valid: false, message: 'El nombre de usuario es requerido' };
+    }
+    
+    // Verificar que no contenga espacios
+    if (username.includes(' ')) {
+        return { valid: false, message: 'El nombre de usuario no puede contener espacios' };
+    }
+    
+    // Verificar longitud mínima
+    if (username.length < 3) {
+        return { valid: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' };
+    }
+    
+    // Verificar caracteres permitidos (letras, números, guión bajo, punto)
+    const validRegex = /^[a-zA-Z0-9_.]+$/;
+    if (!validRegex.test(username)) {
+        return { valid: false, message: 'El nombre de usuario solo puede contener letras, números, guión bajo (_) y punto (.)' };
+    }
+    
+    return { valid: true };
+}
+
 // Función para validar y formatear número de teléfono mexicano
 function validateAndFormatPhone(phone) {
     if (!phone || phone.trim() === '') {
@@ -38,10 +63,19 @@ function validateAndFormatPhone(phone) {
     return null;
 }
 
-// Registro con validación de teléfono mexicano
+// Registro con validación de teléfono mexicano y username sin espacios
 router.post('/register', async (req, res) => {
     const { username, email, phone, password } = req.body;
     const supabase = getDb();
+    
+    // Validar username (sin espacios)
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+        return res.status(400).json({ 
+            success: false, 
+            message: usernameValidation.message 
+        });
+    }
     
     // Validar teléfono (obligatorio)
     if (!phone || phone.trim() === '') {
@@ -58,6 +92,14 @@ router.post('/register', async (req, res) => {
         return res.status(400).json({ 
             success: false, 
             message: 'Número de teléfono inválido. Debe ser un número mexicano de 10 dígitos (ej: 9381770841) o incluir 52 (ej: 529381770841)' 
+        });
+    }
+    
+    // Validar contraseña
+    if (!password || password.length < 4) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'La contraseña debe tener al menos 4 caracteres' 
         });
     }
     
@@ -82,7 +124,7 @@ router.post('/register', async (req, res) => {
             if (error.code === '23505') { // Unique violation
                 return res.status(400).json({ 
                     success: false, 
-                    message: 'El usuario ya existe' 
+                    message: 'El nombre de usuario ya está en uso' 
                 });
             }
             throw error;
@@ -91,7 +133,7 @@ router.post('/register', async (req, res) => {
         res.json({ 
             success: true, 
             message: 'Usuario registrado exitosamente',
-            phone: formattedPhone // Opcional: devolver el teléfono formateado
+            phone: formattedPhone
         });
         
     } catch (error) {
@@ -100,7 +142,7 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// Login (sin cambios, solo adaptado a Supabase)
+// Login (sin cambios)
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
     const supabase = getDb();
@@ -149,7 +191,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// Cambiar contraseña (adaptado a Supabase)
+// Cambiar contraseña
 router.post('/change-password', authenticateToken, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
@@ -208,7 +250,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     }
 });
 
-// Verificar token (adaptado a Supabase)
+// Verificar token
 router.post('/verify', async (req, res) => {
     const token = req.headers.authorization?.split(' ')[1];
     
