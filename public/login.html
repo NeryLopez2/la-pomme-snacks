@@ -316,441 +316,379 @@
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // ==================== CONFIGURACIÓN ====================
-        const API_URL = 'http://localhost:3000/api';
-        
-        // ==================== ELEMENTOS DEL DOM ====================
-        // Registro
-        const regUser = document.getElementById('regUser');
-        const regEmail = document.getElementById('regEmail');
-        const regPhone = document.getElementById('regPhone');
-        const regPassword = document.getElementById('regPassword');
-        const regConfirm = document.getElementById('regConfirmPassword');
-        
-        const userError = document.getElementById('userError');
-        const userValid = document.getElementById('userValid');
-        const emailError = document.getElementById('emailError');
-        const emailValid = document.getElementById('emailValid');
-        const phoneError = document.getElementById('phoneError');
-        const phoneValid = document.getElementById('phoneValid');
-        const pwdError = document.getElementById('pwdError');
-        const pwdValid = document.getElementById('pwdValid');
-        const confirmError = document.getElementById('confirmError');
-        const confirmValid = document.getElementById('confirmValid');
-        
-        const strengthFill = document.getElementById('strengthFill');
-        const strengthText = document.getElementById('strengthText');
-        
-        // ==================== FUNCIONES DE VALIDACIÓN ====================
-        
-        // Validar Usuario (3-20 caracteres, solo letras/números/guion bajo)
-        function validateUser() {
-            const value = regUser.value.trim();
-            const regex = /^[a-zA-Z0-9_]{3,20}$/;
-            
-            if (value === '') {
-                regUser.classList.add('is-invalid');
-                regUser.classList.remove('is-valid');
-                userError.textContent = 'El usuario es requerido';
-                userError.classList.add('show');
-                userValid.classList.remove('show');
-                return false;
-            }
-            
-            if (value.length < 3) {
-                regUser.classList.add('is-invalid');
-                regUser.classList.remove('is-valid');
-                userError.textContent = 'El usuario debe tener al menos 3 caracteres';
-                userError.classList.add('show');
-                userValid.classList.remove('show');
-                return false;
-            }
-            
-            if (value.length > 20) {
-                regUser.classList.add('is-invalid');
-                regUser.classList.remove('is-valid');
-                userError.textContent = 'El usuario no puede tener más de 20 caracteres';
-                userError.classList.add('show');
-                userValid.classList.remove('show');
-                return false;
-            }
-            
-            if (!regex.test(value)) {
-                regUser.classList.add('is-invalid');
-                regUser.classList.remove('is-valid');
-                userError.textContent = 'Solo letras, números y guión bajo. Sin espacios';
-                userError.classList.add('show');
-                userValid.classList.remove('show');
-                return false;
-            }
-            
-            regUser.classList.remove('is-invalid');
-            regUser.classList.add('is-valid');
-            userError.classList.remove('show');
-            userValid.classList.add('show');
-            return true;
+ <script  const express = require('express');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { getDb } = require('../db');
+const { authenticateToken } = require('../middleware/auth');
+
+const router = express.Router();
+const JWT_SECRET = 'la-pomme-secret-key-2026';
+
+// ==================== FUNCIONES DE VALIDACIÓN ====================
+
+// Validar username (sin espacios, caracteres permitidos)
+function validateUsername(username) {
+    if (!username || username.trim() === '') {
+        return { valid: false, message: 'El nombre de usuario es requerido' };
+    }
+    
+    // Verificar que no contenga espacios
+    if (username.includes(' ')) {
+        return { valid: false, message: 'El nombre de usuario no puede contener espacios' };
+    }
+    
+    // Verificar longitud mínima
+    if (username.length < 3) {
+        return { valid: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' };
+    }
+    
+    // Verificar caracteres permitidos (letras, números, guión bajo, punto)
+    const validRegex = /^[a-zA-Z0-9_.]+$/;
+    if (!validRegex.test(username)) {
+        return { valid: false, message: 'El nombre de usuario solo puede contener letras, números, guión bajo (_) y punto (.)' };
+    }
+    
+    return { valid: true };
+}
+
+// Validar email
+function validateEmail(email) {
+    if (!email) return { valid: true }; // Email es opcional
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return { valid: false, message: 'El correo electrónico no es válido' };
+    }
+    
+    return { valid: true };
+}
+
+// Validar y formatear número de teléfono mexicano
+function validateAndFormatPhone(phone) {
+    if (!phone || phone.trim() === '') {
+        return { valid: false, message: 'El número de teléfono es requerido' };
+    }
+    
+    // Limpiar el número: eliminar espacios, guiones, etc.
+    let cleanPhone = phone.toString().replace(/[\s\-\(\)]/g, '');
+    
+    // Si ya tiene +52 al inicio, mantenerlo
+    if (cleanPhone.startsWith('+52')) {
+        cleanPhone = cleanPhone.substring(1); // Quitar el + para guardar
+        if (/^52\d{10}$/.test(cleanPhone)) {
+            return { valid: true, phone: cleanPhone };
         }
-        
-        // Validar Email
-        function validateEmail() {
-            const value = regEmail.value.trim();
-            const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            
-            if (value === '') {
-                regEmail.classList.add('is-invalid');
-                regEmail.classList.remove('is-valid');
-                emailError.textContent = 'El correo es requerido';
-                emailError.classList.add('show');
-                emailValid.classList.remove('show');
-                return false;
-            }
-            
-            if (!regex.test(value)) {
-                regEmail.classList.add('is-invalid');
-                regEmail.classList.remove('is-valid');
-                emailError.textContent = 'Formato de correo inválido (ej: usuario@dominio.com)';
-                emailError.classList.add('show');
-                emailValid.classList.remove('show');
-                return false;
-            }
-            
-            regEmail.classList.remove('is-invalid');
-            regEmail.classList.add('is-valid');
-            emailError.classList.remove('show');
-            emailValid.classList.add('show');
-            return true;
-        }
-        
-        // Validar Teléfono (521 + 10 dígitos)
-        function validatePhone() {
-            const value = regPhone.value.trim();
-            const regex = /^521\d{10}$/;
-            
-            if (value === '') {
-                regPhone.classList.add('is-invalid');
-                regPhone.classList.remove('is-valid');
-                phoneError.textContent = 'El teléfono es requerido';
-                phoneError.classList.add('show');
-                phoneValid.classList.remove('show');
-                return false;
-            }
-            
-            if (!regex.test(value)) {
-                regPhone.classList.add('is-invalid');
-                regPhone.classList.remove('is-valid');
-                phoneError.textContent = 'Formato inválido. Debe ser 521 + 10 dígitos';
-                phoneError.classList.add('show');
-                phoneValid.classList.remove('show');
-                return false;
-            }
-            
-            regPhone.classList.remove('is-invalid');
-            regPhone.classList.add('is-valid');
-            phoneError.classList.remove('show');
-            phoneValid.classList.add('show');
-            return true;
-        }
-        
-        // Validar Contraseña con medidor de fortaleza
-        function checkStrength(password) {
-            let strength = 0;
-            if (password.length >= 4) strength++;
-            if (password.length >= 6) strength++;
-            if (password.length >= 8) strength++;
-            if (/[A-Z]/.test(password)) strength++;
-            if (/[0-9]/.test(password)) strength++;
-            if (/[^A-Za-z0-9]/.test(password)) strength++;
-            
-            const levels = [
-                { width: 20, color: '#dc3545', text: 'Muy débil' },
-                { width: 40, color: '#dc3545', text: 'Débil' },
-                { width: 60, color: '#ffc107', text: 'Media' },
-                { width: 80, color: '#28a745', text: 'Buena' },
-                { width: 90, color: '#17a2b8', text: 'Fuerte' },
-                { width: 100, color: '#28a745', text: 'Muy fuerte' }
-            ];
-            const idx = Math.min(strength, levels.length - 1);
-            strengthFill.style.width = levels[idx].width + '%';
-            strengthFill.style.backgroundColor = levels[idx].color;
-            strengthText.textContent = levels[idx].text;
-            strengthText.style.color = levels[idx].color;
-        }
-        
-        function validatePassword() {
-            const value = regPassword.value;
-            
-            if (value === '') {
-                regPassword.classList.add('is-invalid');
-                regPassword.classList.remove('is-valid');
-                pwdError.textContent = 'La contraseña es requerida';
-                pwdError.classList.add('show');
-                pwdValid.classList.remove('show');
-                checkStrength('');
-                return false;
-            }
-            
-            if (value.length < 4) {
-                regPassword.classList.add('is-invalid');
-                regPassword.classList.remove('is-valid');
-                pwdError.textContent = 'La contraseña debe tener al menos 4 caracteres';
-                pwdError.classList.add('show');
-                pwdValid.classList.remove('show');
-                checkStrength(value);
-                return false;
-            }
-            
-            regPassword.classList.remove('is-invalid');
-            regPassword.classList.add('is-valid');
-            pwdError.classList.remove('show');
-            pwdValid.classList.add('show');
-            checkStrength(value);
-            return true;
-        }
-        
-        // Validar Confirmación de Contraseña
-        function validateConfirm() {
-            const pwd = regPassword.value;
-            const confirm = regConfirm.value;
-            
-            if (confirm === '') {
-                regConfirm.classList.add('is-invalid');
-                regConfirm.classList.remove('is-valid');
-                confirmError.textContent = 'Confirma tu contraseña';
-                confirmError.classList.add('show');
-                confirmValid.classList.remove('show');
-                return false;
-            }
-            
-            if (pwd !== confirm) {
-                regConfirm.classList.add('is-invalid');
-                regConfirm.classList.remove('is-valid');
-                confirmError.textContent = 'Las contraseñas no coinciden';
-                confirmError.classList.add('show');
-                confirmValid.classList.remove('show');
-                return false;
-            }
-            
-            regConfirm.classList.remove('is-invalid');
-            regConfirm.classList.add('is-valid');
-            confirmError.classList.remove('show');
-            confirmValid.classList.add('show');
-            return true;
-        }
-        
-        // ==================== EVENTOS EN TIEMPO REAL ====================
-        regUser.addEventListener('input', validateUser);
-        regEmail.addEventListener('input', validateEmail);
-        regPhone.addEventListener('input', validatePhone);
-        regPassword.addEventListener('input', function() {
-            validatePassword();
-            validateConfirm();
+    }
+    
+    // Si ya tiene 52 al inicio (sin +)
+    if (cleanPhone.startsWith('52') && /^52\d{10}$/.test(cleanPhone)) {
+        return { valid: true, phone: cleanPhone };
+    }
+    
+    // Si son 10 dígitos, agregar 52
+    if (/^\d{10}$/.test(cleanPhone)) {
+        return { valid: true, phone: '52' + cleanPhone };
+    }
+    
+    // Formato inválido
+    return { valid: false, message: 'Número de teléfono inválido. Debe ser un número mexicano de 10 dígitos (ej: 9381770841) o incluir 52 (ej: 529381770841)' };
+}
+
+// Validar contraseña
+function validatePassword(password) {
+    if (!password) {
+        return { valid: false, message: 'La contraseña es requerida' };
+    }
+    
+    if (password.length < 4) {
+        return { valid: false, message: 'La contraseña debe tener al menos 4 caracteres' };
+    }
+    
+    return { valid: true };
+}
+
+// ==================== REGISTRO DE USUARIO ====================
+router.post('/register', async (req, res) => {
+    const { username, email, phone, password } = req.body;
+    const supabase = getDb();
+    
+    // 1. Validar username (sin espacios)
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+        return res.status(400).json({ 
+            success: false, 
+            message: usernameValidation.message 
         });
-        regConfirm.addEventListener('input', validateConfirm);
-        
-        // Toggle password visibility
-        document.getElementById('togglePwd').addEventListener('click', function() {
-            const type = regPassword.type === 'password' ? 'text' : 'password';
-            regPassword.type = type;
-            this.classList.toggle('fa-eye');
-            this.classList.toggle('fa-eye-slash');
+    }
+    
+    // 2. Validar email (si se proporciona)
+    if (email) {
+        const emailValidation = validateEmail(email);
+        if (!emailValidation.valid) {
+            return res.status(400).json({ 
+                success: false, 
+                message: emailValidation.message 
+            });
+        }
+    }
+    
+    // 3. Validar teléfono
+    const phoneValidation = validateAndFormatPhone(phone);
+    if (!phoneValidation.valid) {
+        return res.status(400).json({ 
+            success: false, 
+            message: phoneValidation.message 
         });
-        
-        document.getElementById('toggleConfirmPwd').addEventListener('click', function() {
-            const type = regConfirm.type === 'password' ? 'text' : 'password';
-            regConfirm.type = type;
-            this.classList.toggle('fa-eye');
-            this.classList.toggle('fa-eye-slash');
+    }
+    
+    // 4. Validar contraseña
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ 
+            success: false, 
+            message: passwordValidation.message 
         });
+    }
+    
+    // Si no viene email, asignar por defecto
+    const userEmail = email || `${username.trim().toLowerCase()}@usuario.com`;
+    const formattedPhone = phoneValidation.phone;
+    const cleanUsername = username.trim().toLowerCase();
+    
+    try {
+        // Verificar si el username ya existe
+        const { data: existingUser, error: findError } = await supabase
+            .from('users')
+            .select('username')
+            .eq('username', cleanUsername)
+            .maybeSingle();
         
-        // ==================== REGISTRO ====================
-        document.getElementById('registerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Ejecutar todas las validaciones
-            const isUserValid = validateUser();
-            const isEmailValid = validateEmail();
-            const isPhoneValid = validatePhone();
-            const isPwdValid = validatePassword();
-            const isConfirmValid = validateConfirm();
-            
-            if (!isUserValid || !isEmailValid || !isPhoneValid || !isPwdValid || !isConfirmValid) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Campos inválidos',
-                    text: 'Por favor, corrige los campos marcados en rojo',
-                    confirmButtonColor: '#d4af37'
-                });
-                return;
-            }
-            
-            const registerBtn = document.getElementById('registerBtn');
-            registerBtn.disabled = true;
-            const originalText = registerBtn.innerHTML;
-            registerBtn.innerHTML = '<span class="btn-spinner"></span> Registrando...';
-            
-            try {
-                const response = await fetch(`${API_URL}/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: regUser.value.trim(),
-                        email: regEmail.value.trim(),
-                        phone: regPhone.value.trim(),
-                        password: regPassword.value
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: '¡Registro exitoso!',
-                        text: 'Tu cuenta ha sido creada. Ahora puedes iniciar sesión.',
-                        confirmButtonColor: '#d4af37'
-                    }).then(() => {
-                        // Limpiar formulario
-                        regUser.value = '';
-                        regEmail.value = '';
-                        regPhone.value = '';
-                        regPassword.value = '';
-                        regConfirm.value = '';
-                        
-                        // Limpiar clases
-                        regUser.classList.remove('is-valid', 'is-invalid');
-                        regEmail.classList.remove('is-valid', 'is-invalid');
-                        regPhone.classList.remove('is-valid', 'is-invalid');
-                        regPassword.classList.remove('is-valid', 'is-invalid');
-                        regConfirm.classList.remove('is-valid', 'is-invalid');
-                        
-                        // Resetear medidor
-                        strengthFill.style.width = '0%';
-                        strengthText.textContent = '';
-                        
-                        // Cambiar a login
-                        const loginTab = document.querySelector('[data-bs-target="#loginPanel"]');
-                        if (loginTab) {
-                            new bootstrap.Tab(loginTab).show();
-                        }
-                    });
-                } else {
-                    let errorMsg = data.message || 'Error al registrar';
-                    if (errorMsg.includes('UNIQUE') || errorMsg.includes('exists')) {
-                        errorMsg = 'El usuario ya existe. Por favor, elige otro nombre.';
-                    }
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error al registrar',
-                        text: errorMsg,
-                        confirmButtonColor: '#d4af37'
-                    });
-                }
-            } catch (error) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error de conexión',
-                    text: 'No se pudo conectar con el servidor. ¿Está corriendo en http://localhost:3000?',
-                    confirmButtonColor: '#d4af37'
-                });
-            } finally {
-                registerBtn.disabled = false;
-                registerBtn.innerHTML = originalText;
+        if (findError && findError.code !== 'PGRST116') throw findError;
+        
+        if (existingUser) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'El nombre de usuario ya está en uso' 
+            });
+        }
+        
+        // Verificar si el teléfono ya existe
+        const { data: existingPhone, error: phoneError } = await supabase
+            .from('users')
+            .select('phone')
+            .eq('phone', formattedPhone)
+            .maybeSingle();
+        
+        if (phoneError && phoneError.code !== 'PGRST116') throw phoneError;
+        
+        if (existingPhone) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'El número de teléfono ya está registrado' 
+            });
+        }
+        
+        // Hashear contraseña
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Crear usuario
+        const { data, error } = await supabase
+            .from('users')
+            .insert([{
+                username: cleanUsername,
+                email: userEmail,
+                phone: formattedPhone,
+                password: hashedPassword,
+                role: 'user'
+            }])
+            .select();
+        
+        if (error) throw error;
+        
+        res.json({ 
+            success: true, 
+            message: 'Usuario registrado exitosamente',
+            user: {
+                id: data[0].id,
+                username: data[0].username,
+                email: data[0].email,
+                phone: data[0].phone
             }
         });
         
-        // ==================== LOGIN ====================
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const username = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value;
-            
-            if (!username || !password) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Campos vacíos',
-                    text: 'Por favor, ingresa tu usuario y contraseña',
-                    confirmButtonColor: '#d4af37'
-                });
-                return;
-            }
-            
-            const loginBtn = document.getElementById('loginBtn');
-            loginBtn.disabled = true;
-            const originalText = loginBtn.innerHTML;
-            loginBtn.innerHTML = '<span class="btn-spinner"></span> Iniciando sesión...';
-            
-            try {
-                const response = await fetch(`${API_URL}/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    localStorage.setItem('authToken', data.token);
-                    localStorage.setItem('currentUser', JSON.stringify(data.user));
-                    
-                    if (data.user.role === 'admin') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: '👑 Bienvenido Administrador',
-                            text: `Hola ${data.user.username}`,
-                            timer: 1500,
-                            showConfirmButton: false
-                        });
-                        setTimeout(() => {
-                            window.location.href = '/admin/index.html';
-                        }, 1500);
-                    } else {
-                        Swal.fire({
-                            icon: 'success',
-                            title: '¡Bienvenido!',
-                            text: `Hola ${data.user.username}`,
-                            timer: 1500,
-                            showConfirmButton: false
-                        });
-                        setTimeout(() => {
-                            window.location.href = '/';
-                        }, 1500);
-                    }
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Credenciales inválidas',
-                        text: data.message || 'Usuario o contraseña incorrectos',
-                        confirmButtonColor: '#d4af37'
-                    });
-                }
-            } catch (error) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error de conexión',
-                    text: 'No se pudo conectar con el servidor',
-                    confirmButtonColor: '#d4af37'
-                });
-            } finally {
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = originalText;
+    } catch (error) {
+        console.error('Error en registro:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==================== LOGIN ====================
+router.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    const supabase = getDb();
+    
+    if (!username || !password) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Usuario y contraseña son requeridos' 
+        });
+    }
+    
+    try {
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username.toLowerCase())
+            .limit(1);
+        
+        if (error) throw error;
+        
+        const user = users?.[0];
+        
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+        }
+        
+        const validPassword = await bcrypt.compare(password, user.password);
+        
+        if (!validPassword) {
+            return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+        }
+        
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        
+        res.json({
+            success: true,
+            token,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                phone: user.phone,
+                role: user.role
             }
         });
+    } catch (error) {
+        console.error('Error en login:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==================== CAMBIAR CONTRASEÑA ====================
+router.post('/change-password', authenticateToken, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    const supabase = getDb();
+    
+    if (req.user.role === 'admin') {
+        return res.status(403).json({ 
+            success: false, 
+            message: 'Los administradores no pueden cambiar su contraseña desde esta sección' 
+        });
+    }
+    
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ success: false, message: passwordValidation.message });
+    }
+    
+    try {
+        const { data: users, error: findError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
         
-        // Redirección si ya hay sesión activa
-        const token = localStorage.getItem('authToken');
-        const user = localStorage.getItem('currentUser');
-        if (token && user) {
-            try {
-                const userData = JSON.parse(user);
-                if (userData.role === 'admin') {
-                    window.location.href = '/admin/index.html';
-                } else {
-                    window.location.href = '/';
-                }
-            } catch(e) {}
+        if (findError) throw findError;
+        
+        if (!users) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
         }
-    </script>
+        
+        const validPassword = await bcrypt.compare(currentPassword, users.password);
+        
+        if (!validPassword) {
+            return res.status(401).json({ success: false, message: 'Contraseña actual incorrecta' });
+        }
+        
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ password: hashedNewPassword })
+            .eq('id', userId);
+        
+        if (updateError) throw updateError;
+        
+        res.json({ success: true, message: 'Contraseña actualizada exitosamente' });
+        
+    } catch (error) {
+        console.error('Error al cambiar contraseña:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==================== VERIFICAR TOKEN ====================
+router.post('/verify', async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const supabase = getDb();
+        
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('id, username, email, phone, role')
+            .eq('id', decoded.id)
+            .maybeSingle();
+        
+        if (error) throw error;
+        
+        if (!users) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+        
+        res.json({ success: true, user: users });
+    } catch (error) {
+        res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+});
+
+// ==================== OBTENER PERFIL DE USUARIO ====================
+router.get('/profile', authenticateToken, async (req, res) => {
+    const supabase = getDb();
+    const userId = req.user.id;
+    
+    try {
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('id, username, email, phone, role, created_at')
+            .eq('id', userId)
+            .maybeSingle();
+        
+        if (error) throw error;
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+        
+        res.json({ success: true, user });
+    } catch (error) {
+        console.error('Error al obtener perfil:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+module.exports = router;
+</script>
 </body>
 </html>
