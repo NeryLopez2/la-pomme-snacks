@@ -28,9 +28,9 @@ if (accountSid && authToken) {
 
 // Datos bancarios
 const BANK = {
-    name: "BBVA México",
-    account: "1234 5678 9012 3456",
-    clabe: "012 345 6789 01234567 8"
+    name: "Banamex",
+    account: "5256 7861 8824 8391",
+    clabe: "0020 5290 5281 9164 88"
 };
 
 // ==================== FUNCIÓN PARA ENVIAR MENSAJE ====================
